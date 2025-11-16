@@ -2,8 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { getSupabase, isSupabaseConfigured } from "@/lib/supabase-client";
 
-const images = [
+type Product = {
+  id?: string;
+  name?: string;
+  image_url?: string | null;
+  image_urls?: string[] | null;
+};
+
+const FALLBACK_IMAGES = [
   {
     src: "/product-carousel-1.png",
     alt: "KP Naturals Hair Oil with Hibiscus and Coconuts",
@@ -32,14 +40,86 @@ const images = [
 
 export function ProductCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [images, setImages] =
+    useState<{ src: string; alt: string }[]>(FALLBACK_IMAGES);
 
   useEffect(() => {
+    let mounted = true;
+
+    async function fetchProductsClient() {
+      try {
+        if (!isSupabaseConfigured()) return; // keep fallbacks
+        const supabase = getSupabase();
+        if (!supabase) return;
+
+        const { data, error } = await supabase
+          .from("products")
+          .select("name,image_url,image_urls")
+          .order("created_at", { ascending: false })
+          .limit(12);
+
+        if (error) {
+          console.warn("ProductCarousel: supabase error", error);
+          return; // keep fallbacks
+        }
+
+        const products: Product[] = data || [];
+        const uploaded: { src: string; alt: string }[] = [];
+
+        for (const p of products) {
+          const arr = (p as any).image_urls as string[] | undefined;
+          if (Array.isArray(arr) && arr.length) {
+            for (const u of arr)
+              if (u) uploaded.push({ src: u, alt: p.name || "Product image" });
+            continue;
+          }
+          if (p.image_url)
+            uploaded.push({ src: p.image_url, alt: p.name || "Product image" });
+        }
+
+        if (mounted) {
+          if (uploaded.length) {
+            const seen = new Set<string>();
+            const combined: { src: string; alt: string }[] = [];
+            for (const u of uploaded) {
+              if (!seen.has(u.src)) {
+                combined.push(u);
+                seen.add(u.src);
+              }
+            }
+            // Fill with fallbacks to reach at least 6 slides
+            for (const f of FALLBACK_IMAGES) {
+              if (combined.length >= 6) break;
+              if (!seen.has(f.src)) {
+                combined.push(f);
+                seen.add(f.src);
+              }
+            }
+            setImages(combined);
+            setCurrentIndex(0);
+          } else {
+            // no uploads -> keep defaults already set
+          }
+        }
+      } catch (e) {
+        // Network failure on client: keep fallbacks silently
+        console.warn("ProductCarousel: client fetch failed", e);
+      }
+    }
+
+    fetchProductsClient();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!images || images.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
-    }, 4000); // Change every 4 seconds
+    }, 4000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [images]);
 
   const goToPrevious = () => {
     setCurrentIndex(

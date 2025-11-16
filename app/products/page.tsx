@@ -28,6 +28,7 @@ import { LanguageToggle } from "@/components/language-toggle";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { useLanguage } from "@/components/language-provider";
 import Link from "next/link";
+import { ProductImageCarousel } from "@/components/product-image-carousel";
 
 interface PricingData {
   currentPrice: string;
@@ -41,6 +42,7 @@ interface Product {
   description: string;
   price: number;
   image_url: string | null;
+  image_urls?: string[] | null;
   created_at: string;
 }
 
@@ -180,11 +182,29 @@ export default function ProductsPage() {
                 >
                   <CardHeader className="p-0">
                     <div className="relative overflow-hidden rounded-t-lg h-64">
-                      <img
-                        src={product.image_url || "/placeholder.svg"}
-                        alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
+                      {(() => {
+                        const carouselImages = (product as any).image_urls
+                          ?.length
+                          ? (product as any).image_urls
+                          : product.image_url
+                          ? [
+                              product.image_url,
+                              "/product-carousel-1.png",
+                              "/product-carousel-2.png",
+                              "/product-carousel-3.png",
+                            ]
+                          : [
+                              "/product-carousel-1.png",
+                              "/product-carousel-2.png",
+                              "/product-carousel-3.png",
+                            ];
+                        return (
+                          <ProductImageCarousel
+                            images={carouselImages}
+                            alt={product.name}
+                          />
+                        );
+                      })()}
                     </div>
                   </CardHeader>
                   <CardContent className="p-6 space-y-4">

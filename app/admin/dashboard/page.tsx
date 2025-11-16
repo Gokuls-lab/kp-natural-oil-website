@@ -45,6 +45,7 @@ interface Product {
   description: string;
   price: number;
   image_url: string | null;
+  image_urls?: string[] | null;
   created_at: string;
 }
 
@@ -74,7 +75,9 @@ export default function AdminDashboard() {
     description: "",
     price: "",
     image_url: "",
+    image_urls: [] as string[],
   });
+  const [selectedImages, setSelectedImages] = useState<FileList | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -179,18 +182,53 @@ export default function AdminDashboard() {
     setIsLoading(true);
     setMessage(null);
     try {
+      let imageUrl = productForm.image_url;
+      let imageUrls: string[] = [];
+
+      // If local files selected, upload each and collect URLs
+      if (selectedImages && selectedImages.length > 0) {
+        for (let i = 0; i < selectedImages.length; i++) {
+          const file = selectedImages[i];
+          const form = new FormData();
+          form.append("file", file);
+          const uploadRes = await fetch("/api/admin/upload", {
+            method: "POST",
+            body: form,
+          });
+          if (!uploadRes.ok) {
+            const data = await uploadRes.json().catch(() => null);
+            throw new Error(data?.error || `Failed to upload image ${i + 1}`);
+          }
+          const uploadData = await uploadRes.json();
+          if (uploadData.publicUrl) imageUrls.push(uploadData.publicUrl);
+        }
+        if (imageUrls.length) imageUrl = imageUrls[0];
+      }
+
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(productForm),
+        body: JSON.stringify({
+          ...productForm,
+          image_url: imageUrl,
+          image_urls: imageUrls.length ? imageUrls : undefined,
+        }),
       });
       if (res.ok) {
-        setProductForm({ name: "", description: "", price: "", image_url: "" });
+        setProductForm({
+          name: "",
+          description: "",
+          price: "",
+          image_url: "",
+          image_urls: [],
+        });
+        setSelectedImages(null);
         await fetchProducts();
         setMessage({ type: "success", text: "Product created successfully" });
         setTimeout(() => setMessage(null), 3000);
       } else {
-        throw new Error("Failed to create product");
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to create product");
       }
     } catch (e: any) {
       setMessage({
@@ -207,17 +245,51 @@ export default function AdminDashboard() {
     setIsLoading(true);
     setMessage(null);
     try {
+      let imageUrl = productForm.image_url;
+      let imageUrls = productForm.image_urls ? [...productForm.image_urls] : [];
+
+      // If new local images chosen, upload and replace arrays
+      if (selectedImages && selectedImages.length > 0) {
+        imageUrls = [];
+        for (let i = 0; i < selectedImages.length; i++) {
+          const file = selectedImages[i];
+          const form = new FormData();
+          form.append("file", file);
+          const uploadRes = await fetch("/api/admin/upload", {
+            method: "POST",
+            body: form,
+          });
+          if (!uploadRes.ok) {
+            const data = await uploadRes.json().catch(() => null);
+            throw new Error(data?.error || `Failed to upload image ${i + 1}`);
+          }
+          const uploadData = await uploadRes.json();
+          if (uploadData.publicUrl) imageUrls.push(uploadData.publicUrl);
+        }
+        if (imageUrls.length) imageUrl = imageUrls[0];
+      }
+
       const res = await fetch("/api/products", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingProduct.id,
-          ...productForm,
+          name: productForm.name,
+          description: productForm.description,
+          price: productForm.price,
+          image_url: imageUrl,
+          image_urls: imageUrls.length ? imageUrls : undefined,
         }),
       });
       if (res.ok) {
         setEditingProduct(null);
-        setProductForm({ name: "", description: "", price: "", image_url: "" });
+        setProductForm({
+          name: "",
+          description: "",
+          price: "",
+          image_url: "",
+          image_urls: [],
+        });
         await fetchProducts();
         setMessage({ type: "success", text: "Product updated successfully" });
         setTimeout(() => setMessage(null), 3000);
@@ -266,12 +338,19 @@ export default function AdminDashboard() {
       description: product.description,
       price: product.price.toString(),
       image_url: product.image_url || "",
+      image_urls: product.image_urls || [],
     });
   };
 
   const cancelEditingProduct = () => {
     setEditingProduct(null);
-    setProductForm({ name: "", description: "", price: "", image_url: "" });
+    setProductForm({
+      name: "",
+      description: "",
+      price: "",
+      image_url: "",
+      image_urls: [],
+    });
   };
 
   const handleLogout = async () => {
@@ -836,21 +915,40 @@ export default function AdminDashboard() {
                         className="border-emerald-200 focus:border-emerald-400 dark:border-emerald-800 dark:focus:border-emerald-600"
                       />
                     </div>
-                    <div>
-                      <Label className="text-emerald-700 dark:text-emerald-100">
-                        Image URL
-                      </Label>
-                      <Input
-                        value={productForm.image_url}
-                        onChange={(e) =>
-                          setProductForm({
-                            ...productForm,
-                            image_url: e.target.value,
-                          })
-                        }
-                        placeholder="/product1.png"
-                        className="border-emerald-200 focus:border-emerald-400 dark:border-emerald-800 dark:focus:border-emerald-600"
-                      />
+                    <div className="space-y-2">
+                      <div>
+                        <Label className="text-emerald-700 dark:text-emerald-100">
+                          Image URL (optional, legacy)
+                        </Label>
+                        <Input
+                          value={productForm.image_url}
+                          onChange={(e) =>
+                            setProductForm({
+                              ...productForm,
+                              image_url: e.target.value,
+                            })
+                          }
+                          placeholder="/product1.png"
+                          className="border-emerald-200 focus:border-emerald-400 dark:border-emerald-800 dark:focus:border-emerald-600 mb-2"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-emerald-700 dark:text-emerald-100">
+                          Upload Images (multiple)
+                        </Label>
+                        <Input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={(e) => setSelectedImages(e.target.files)}
+                          className="border-emerald-200 focus:border-emerald-400 dark:border-emerald-800 dark:focus:border-emerald-600"
+                        />
+                        {selectedImages && selectedImages.length > 0 && (
+                          <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80 mt-1">
+                            {selectedImages.length} image(s) selected
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       {editingProduct ? (

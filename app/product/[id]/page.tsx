@@ -23,6 +23,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import Link from "next/link";
+import { ProductImageCarousel } from "@/components/product-image-carousel";
 import { useLanguage } from "@/components/language-provider";
 
 interface Product {
@@ -223,12 +224,30 @@ export default function ProductDetailPage() {
 
         {/* Product Details */}
         <div className="grid lg:grid-cols-2 gap-8 mb-12">
-          <div className="relative">
-            <img
-              src={product.image_url || "/placeholder.svg"}
-              alt={product.name}
-              className="w-full h-auto max-h-[500px] object-contain rounded-lg shadow-lg"
-            />
+          <div className="relative rounded-lg overflow-hidden shadow-lg h-[320px] sm:h-[400px] md:h-[500px] bg-muted">
+            {(() => {
+              const images = (product as any).image_urls?.length
+                ? (product as any).image_urls
+                : product.image_url
+                ? [
+                    product.image_url,
+                    "/product-carousel-1.png",
+                    "/product-carousel-2.png",
+                    "/product-carousel-3.png",
+                  ]
+                : [
+                    "/product-carousel-1.png",
+                    "/product-carousel-2.png",
+                    "/product-carousel-3.png",
+                  ];
+              return (
+                <ProductImageCarousel
+                  images={images}
+                  alt={product.name}
+                  intervalMs={4000}
+                />
+              );
+            })()}
           </div>
 
           <div className="space-y-6">
